@@ -6,15 +6,24 @@ pointing at a part of the exploded shoe opens a short explainer for that part.
 
 ## How it works
 
+Visitors **swipe** with an open hand; the direction points at a region of the shoe as it sits on screen.
+
 | Visitor does | Kiosk does |
 | --- | --- |
-| Nobody around, or nothing hovered | The whole shoe slowly rotates back and forth and floats, with an overview of the product |
-| Raises a hand | A cursor follows the index fingertip |
-| Moves over a part (or its label) | The shoe holds still and just that piece breaks away from the shoe (attached pieces ride along), glows, and the rest fade back; its info appears bottom-left |
-| Moves to another part | The first piece slots back in and the new one breaks away |
-| Moves off the shoe | The shoe is whole again and the panel shows the overview |
+| Nobody around, or nothing open | The whole shoe slowly rotates back and forth and floats, with an overview of the product |
+| Raises a hand | A dot follows their palm; hints around the shoe show ↑ TOP, ↓ SOLE, ← HEEL, TOE → |
+| Swipes up | The top opens: tongue, then laces, then upper on each further swipe up |
+| Swipes down | The sole opens: midsole, then outsole |
+| Swipes left / right | The heel / toe cap breaks away |
+| No swipe for 12 s | The piece slides back and the overview returns |
 
-Hover is the whole interaction: no clicking, holding or pinching needed.
+The opened piece breaks away from the shoe (attached pieces ride along), glows, and the rest fade back; its info appears
+bottom-left. Bringing the hand back after a swipe is ignored, and slow movement, small jiggles and diagonal moves never
+count as swipes. Swipe → part mapping lives in `SWIPE_REGIONS` in `lib/product.ts`; swipe sensitivity in `lib/swipe.ts`.
+
+**Mouse and touch** can't swipe, so they still hover / tap parts or their labels directly.
+
+Prefer the previous point-and-hover hand interaction? It's preserved on the `hover-version` branch.
 
 **Camera view:** the camera always tracks hands, but the video of the visitor is hidden by default so nobody has to
 look at themselves. `SHOW CAMERA VIEW` in the bottom-right corner (or `c`) brings up a small preview with the tracked
@@ -23,15 +32,16 @@ hand drawn on it, which is handy for staff setting up.
 **Camera on/off:** `TURN CAMERA OFF` (or `o`) releases the webcam entirely. Touch and mouse hover/click keep working the
 same way, so it still runs on a touchscreen or with no camera. `TURN CAMERA ON` starts tracking again.
 
-Staff keys: `←/→` cycle parts, `c` shows/hides the camera view, `o` turns the camera off/on, `f` toggles fullscreen.
+Staff keys: arrow keys act as swipes, `d` shows the last detected swipe (for tuning), `c` shows/hides the camera view, `o` turns the camera off/on, `f` toggles fullscreen.
 
 ## Code map
 
 - `lib/product.ts` — product name and per-part copy. Swap this to demo another product.
 - `lib/shoe.ts` — sliced 3D shoe geometry (ported from the "B · Centre stage" design reference).
-- `lib/useHandTracking.ts` — webcam + MediaPipe loop; reports the fingertip each frame; can be switched off.
-- `app/kiosk/Kiosk.tsx` — hover hit-testing, pull-apart animation, attract mode, camera view toggle, layout.
-- Tuning constants (hover settle time, easing speed, idle timeout…) are at the top of `Kiosk.tsx`.
+- `lib/useHandTracking.ts` — webcam + MediaPipe loop; reports the fingertip and palm each frame; can be switched off.
+- `lib/swipe.ts` — turns palm positions into up / down / left / right swipes.
+- `app/kiosk/Kiosk.tsx` — swipes, mouse hover hit-testing, pull-apart animation, attract mode, camera toggles, layout.
+- Tuning constants (detail hold time, hover settle time, easing speed, idle timeout…) are at the top of `Kiosk.tsx`.
 
 The hand model ships in `public/models/`, and `npm run dev` / `npm run build` copy the MediaPipe WASM runtime into
 `public/mediapipe/`, so the kiosk works without internet once built (expo Wi-Fi is unreliable).

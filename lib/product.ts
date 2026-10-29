@@ -69,5 +69,14 @@ export const PARTS: Record<PartId, PartInfo> = {
 export const LEFT_LABELS: PartId[] = ["tongue", "laces", "upper", "toe"];
 export const RIGHT_LABELS: PartId[] = ["heel", "midsole", "outsole"];
 
-// Order used when cycling (attract mode).
+// Hand swipes point at a region of the shoe as it sits on screen. Swiping the
+// same way again steps to the next piece in that region.
+export const SWIPE_REGIONS: Record<"up" | "down" | "left" | "right", { label: string; parts: PartId[] }> = {
+  up: { label: "TOP", parts: ["tongue", "laces", "upper"] },
+  down: { label: "SOLE", parts: ["midsole", "outsole"] },
+  left: { label: "HEEL", parts: ["heel"] },
+  right: { label: "TOE", parts: ["toe"] },
+};
+
+// All parts, in a stable order.
 export const PART_ORDER: PartId[] = ["outsole", "midsole", "upper", "laces", "tongue", "heel", "toe"];

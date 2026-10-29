@@ -47,10 +47,10 @@ const PULL: Record<PartId, [number, number, number]> = {
   upper: [0, -64, 0.04],
   heel: [-74, -14, 0.06],
   toe: [70, -18, 0.06],
-  tongue: [-14, -92, 0.08],
+  tongue: [-14, -72, 0.08],
   laces: [16, -66, 0.06],
   midsole: [0, 58, 0.03],
-  outsole: [0, 96, 0.03],
+  outsole: [0, 72, 0.03],
 };
 
 // Pieces attached to a pulled part travel with it, so nothing ends up buried:

@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { buildHitLayers, buildShoe, NO_PULL } from "@/lib/shoe";
-import { LEFT_LABELS, PARTS, PART_ORDER, PRODUCT, RIGHT_LABELS, type PartId } from "@/lib/product";
+import { LEFT_LABELS, PARTS, PART_ORDER, PRODUCT, RIGHT_LABELS, SWIPE_REGIONS, type PartId } from "@/lib/product";
+import { SwipeDetector, type SwipeDir } from "@/lib/swipe";
 import { useHandTracking, type HandFrame } from "@/lib/useHandTracking";
 import styles from "./kiosk.module.css";
 
@@ -10,7 +11,8 @@ const ACCENT = "#BFD8FF";
 const STAGE_W = 1280;
 const STAGE_H = 720;
 
-// Interaction tuning.
+// Interaction tuning. Hands swipe; the mouse hovers (it can't swipe).
+const DETAIL_HOLD_MS = 12000; // a swiped-open part closes after this long without another swipe
 const HOVER_SETTLE_MS = 120; // hover this long before a part pulls out (stops flicker when sweeping across)
 const HOVER_GRACE_MS = 250; // keep hover through brief tracking misses at part edges
 const UNHOVER_MS = 400; // off the shoe this long → parts settle back and the shoe overview shows
@@ -21,6 +23,9 @@ const TRAIL_LEN = 10;
 // Easing time constants (seconds): smaller = snappier.
 const TAU_PULL = 0.2;
 const TAU_FOCUS = 0.3;
+
+const ARROWS: Record<SwipeDir, string> = { up: "↑", down: "↓", left: "←", right: "→" };
+const KEY_DIRS: Record<string, SwipeDir> = { ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right" };
 
 type Mode = "attract" | "engaged";
 type Anim = { focus: number; pull: Record<PartId, number> };
@@ -39,11 +44,14 @@ export default function Kiosk() {
   const [showSelf, setShowSelf] = useState(false); // hidden self-view; tracking still runs
   const [scale, setScale] = useState(1);
   const [anim, setAnim] = useState<Anim>({ focus: 0, pull: NO_PULL });
+  const [flash, setFlash] = useState<{ dir: SwipeDir; n: number } | null>(null);
+  const [debug, setDebug] = useState<string | null>(null); // 'd' shows the last swipe, for tuning
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const camCanvasRef = useRef<HTMLCanvasElement>(null);
   const cursorRef = useRef<HTMLDivElement>(null);
   const trailRef = useRef<SVGPolylineElement>(null);
+  const swipes = useRef<SwipeDetector | null>(null);
 
   // Mutable interaction state that changes every frame and shouldn't re-render.
   const ix = useRef({
@@ -56,7 +64,8 @@ export default function Kiosk() {
     lastActive: 0,
     trail: [] as [number, number][],
     active: null as PartId | null,
-    pinned: false, // a tapped part stays open on touchscreens, which have no hover
+    pinned: false, // swiped / tapped / keyed parts stay open (no hover to keep them there)
+    swipedAt: 0,
     mode: "attract" as Mode,
   });
 
@@ -80,6 +89,27 @@ export default function Kiosk() {
     cursorRef.current?.toggleAttribute("data-over", !!part);
   }, []);
 
+  const clearHover = useCallback(() => {
+    const s = ix.current;
+    s.hoverPart = null;
+    s.lastHit = 0;
+    s.hoverSince = performance.now();
+  }, []);
+
+  // ---- Swipes: each direction opens the next piece in that region of the shoe --
+  const onSwipe = useCallback(
+    (dir: SwipeDir) => {
+      const s = ix.current;
+      const parts = SWIPE_REGIONS[dir].parts;
+      const i = s.active ? parts.indexOf(s.active) : -1;
+      s.pinned = true;
+      s.swipedAt = performance.now();
+      activate(parts[(i + 1) % parts.length]);
+      setFlash((f) => ({ dir, n: (f?.n ?? 0) + 1 }));
+    },
+    [activate],
+  );
+
   // ---- Hand input -------------------------------------------------------
   const onHand = useCallback(
     (hand: HandFrame | null) => {
@@ -93,21 +123,30 @@ export default function Kiosk() {
           s.trail = [];
           trailRef.current?.setAttribute("points", "");
           cursor?.style.setProperty("opacity", "0");
-          s.lastHit = 0;
-          hoverAt(null, now);
+          // Keep the swipe history: fast swipes blur and tracking often drops a frame or two
+          // mid-swipe. Old points age out of the detector's window on their own.
           setHandVisible(false);
         }
         return;
       }
 
+      swipes.current ??= new SwipeDetector();
+      const swipe = swipes.current.push(now, hand.palmX * hand.aspect, hand.palmY);
+      if (swipe) {
+        onSwipe(swipe.dir);
+        setDebug((d) => d !== null ? `${swipe.dir.toUpperCase()} · dx ${swipe.dx.toFixed(2)} dy ${swipe.dy.toFixed(2)}` : d);
+      }
+
+      // The on-screen dot follows the palm so visitors can see their swipe.
       const span = 1 - HAND_MARGIN * 2;
-      const tx = Math.min(Math.max((hand.x - HAND_MARGIN) / span, 0), 1) * window.innerWidth;
-      const ty = Math.min(Math.max((hand.y - HAND_MARGIN) / span, 0), 1) * window.innerHeight;
+      const tx = Math.min(Math.max((hand.palmX - HAND_MARGIN) / span, 0), 1) * window.innerWidth;
+      const ty = Math.min(Math.max((hand.palmY - HAND_MARGIN) / span, 0), 1) * window.innerHeight;
 
       if (!s.hasPos) {
         s.x = tx;
         s.y = ty;
         s.hasPos = true;
+        clearHover(); // a hand takes over from the mouse; don't let a stale mouse hover win
         setHandVisible(true);
       }
       s.x += (tx - s.x) * (1 - SMOOTHING);
@@ -125,10 +164,8 @@ export default function Kiosk() {
       s.trail.push([s.x, s.y]);
       if (s.trail.length > TRAIL_LEN) s.trail.shift();
       trailRef.current?.setAttribute("points", s.trail.map((p) => p.join(",")).join(" "));
-
-      hoverAt(partAt(s.x, s.y), now);
     },
-    [hoverAt],
+    [onSwipe, clearHover],
   );
 
   const status = useHandTracking(videoRef, camCanvasRef, onHand, ACCENT, cameraOn);
@@ -153,10 +190,8 @@ export default function Kiosk() {
       activate(part);
     };
     const key = (e: KeyboardEvent) => {
-      const i = ix.current.active ? PART_ORDER.indexOf(ix.current.active) : -1;
-      if (e.key.startsWith("Arrow")) ix.current.pinned = true; // keyboard picks stay until the next hover
-      if (e.key === "ArrowRight" || e.key === "ArrowDown") activate(PART_ORDER[(i + 1) % PART_ORDER.length]);
-      if (e.key === "ArrowLeft" || e.key === "ArrowUp") activate(PART_ORDER[(i - 1 + PART_ORDER.length) % PART_ORDER.length]);
+      if (KEY_DIRS[e.key]) onSwipe(KEY_DIRS[e.key]); // arrow keys act like swipes, for testing
+      if (e.key === "d") setDebug((d) => (d === null ? "no swipe yet" : null));
       if (e.key === "c") setShowSelf((v) => !v);
       if (e.key === "o") setCameraOn((v) => !v);
       if (e.key === "f") {
@@ -164,7 +199,7 @@ export default function Kiosk() {
         else document.documentElement.requestFullscreen().catch(() => {});
       }
     };
-    const leave = () => hoverAt(null, 0);
+    const leave = () => clearHover();
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerdown", down);
     window.addEventListener("keydown", key);
@@ -175,7 +210,7 @@ export default function Kiosk() {
       window.removeEventListener("keydown", key);
       document.documentElement.removeEventListener("pointerleave", leave);
     };
-  }, [activate, hoverAt]);
+  }, [activate, hoverAt, clearHover, onSwipe]);
 
   // ---- Animation loop: settle hover, ease pull / focus ----------------------
   useEffect(() => {
@@ -194,12 +229,18 @@ export default function Kiosk() {
         activate(s.hoverPart);
       } else if (!s.hoverPart && s.active && s.mode === "engaged" && !s.pinned && now - s.hoverSince >= UNHOVER_MS) {
         activate(null);
+      } else if (s.swipedAt && s.active && now - s.swipedAt > DETAIL_HOLD_MS) {
+        // No swipe for a while: back to the whole shoe.
+        s.swipedAt = 0;
+        s.pinned = false;
+        activate(null);
       }
       // Nobody around: back to the whole, gently swaying shoe.
       if (s.mode === "engaged" && !s.hasPos && now - s.lastActive > IDLE_MS) {
         s.mode = "attract";
         s.active = null;
         s.pinned = false;
+        s.swipedAt = 0;
         setMode("attract");
         setActive(null);
       }
@@ -244,12 +285,12 @@ export default function Kiosk() {
     : !camOk
       ? "HOVER OVER A PART"
       : handVisible
-        ? "POINT AT A PART"
-        : "STEP IN AND RAISE A HAND";
+        ? "SWIPE TO EXPLORE"
+        : "RAISE A HAND, THEN SWIPE";
   const subline = !engaged
     ? "Every part of this shoe has a story. Take a look inside."
     : camOk
-      ? "Move over any part to pull it out."
+      ? "Up for the top, down for the sole, left for the heel, right for the toe."
       : "Move over any part, or tap its name.";
 
   const label = (id: PartId) => {
@@ -335,6 +376,20 @@ export default function Kiosk() {
           </div>
         </div>
 
+        {/* Swipe hints sit on the side of the shoe each swipe opens. */}
+        {camOk &&
+          (Object.keys(SWIPE_REGIONS) as SwipeDir[]).map((dir) => (
+            <div
+              key={flash?.dir === dir ? `${dir}-${flash.n}` : dir}
+              className={styles.swipeHint}
+              data-dir={dir}
+              data-flash={flash?.dir === dir ? "" : undefined}
+              data-on={active && SWIPE_REGIONS[dir].parts.includes(active) ? "" : undefined}
+            >
+              {dir === "right" ? `${SWIPE_REGIONS[dir].label} ${ARROWS[dir]}` : `${ARROWS[dir]} ${SWIPE_REGIONS[dir].label}`}
+            </div>
+          ))}
+
         <div className={styles.labelsLeft}>{LEFT_LABELS.map(label)}</div>
         <div className={styles.labelsRight}>{RIGHT_LABELS.map(label)}</div>
 
@@ -356,7 +411,7 @@ export default function Kiosk() {
             title={STATUS_TEXT[status]}
             style={status === "tracking" ? { background: ACCENT, boxShadow: `0 0 10px ${ACCENT}` } : undefined}
           />
-          {camOk ? "POINT / HOVER" : STATUS_TEXT[status]}
+          {debug ?? (camOk ? "SWIPE ↑ ↓ ← →" : STATUS_TEXT[status])}
           {camOk && (
             <button
               type="button"

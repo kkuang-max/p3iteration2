@@ -9,8 +9,15 @@ export type HandFrame = {
   // Index fingertip, mirrored so moving your hand right moves the cursor right. 0..1.
   x: number;
   y: number;
+  // Palm centre (wrist + knuckles), mirrored. Steadier than a fingertip for swipes. 0..1.
+  palmX: number;
+  palmY: number;
+  // Video width / height, to compare horizontal and vertical movement fairly.
+  aspect: number;
   landmarks: NormalizedLandmark[];
 };
+
+const PALM = [0, 5, 9, 13, 17];
 
 const WASM_PATH = "/mediapipe/wasm";
 const MODEL_PATH = "/models/hand_landmarker.task";
@@ -117,9 +124,14 @@ export function useHandTracking(
           return;
         }
         const tip = lm[8];
+        const palmX = PALM.reduce((sum, i) => sum + lm[i].x, 0) / PALM.length;
+        const palmY = PALM.reduce((sum, i) => sum + lm[i].y, 0) / PALM.length;
         onFrameRef.current({
           x: 1 - tip.x,
           y: tip.y,
+          palmX: 1 - palmX,
+          palmY,
+          aspect: video.videoWidth / Math.max(video.videoHeight, 1),
           landmarks: lm,
         });
       };
