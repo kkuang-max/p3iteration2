@@ -1,0 +1,291 @@
+/* Values follow the "B · Centre stage" design reference (1280×720 artboard). */
+
+.viewport {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: #131826;
+  cursor: default;
+  user-select: none;
+  touch-action: none;
+}
+
+.stage {
+  flex: none;
+  width: 1280px;
+  height: 720px;
+  position: relative;
+  overflow: hidden;
+  background-color: #131826;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+    radial-gradient(ellipse 70% 75% at 50% 50%, #2d3554 0%, #1f263d 48%, #131826 100%);
+  background-size: 40px 40px, 40px 40px, 100% 100%;
+  color: #eef0f6;
+  font-family: var(--font-inter), "Inter", system-ui, sans-serif;
+}
+
+.frame {
+  position: absolute;
+  left: 32px;
+  top: 26px;
+  right: 40px;
+  bottom: 52px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 100px;
+  pointer-events: none;
+}
+
+.eyebrow {
+  position: absolute;
+  left: 30px;
+  top: 20px;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  color: #d6dae6;
+}
+
+.headline {
+  position: absolute;
+  left: 31px;
+  top: 44px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.headlineTitle {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  animation: rise 500ms ease-out both;
+}
+
+.headlineSub {
+  font-size: 15px;
+  color: #c9cedd;
+}
+
+.shadow {
+  position: absolute;
+  left: 380px;
+  top: 545px;
+  width: 540px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  filter: blur(18px);
+}
+
+.shoeWrap {
+  position: absolute;
+  left: 290px;
+  top: 44px;
+  width: 700px;
+  height: 542px;
+  perspective: 1800px;
+}
+
+.shoe {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 700px;
+  height: 542px;
+  transform-style: preserve-3d;
+  transform: rotateX(-16deg) rotateY(-28deg);
+  animation: sway 12s ease-in-out infinite;
+}
+
+.slice {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.slice path {
+  transition: stroke 200ms ease;
+}
+
+.labelsLeft,
+.labelsRight {
+  position: absolute;
+  top: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  color: #a9b0c3;
+}
+
+.labelsLeft {
+  left: 80px;
+  align-items: flex-start;
+}
+
+.labelsRight {
+  right: 88px;
+  align-items: flex-end;
+}
+
+/* Generous hit area so pointing at a label also works. */
+.label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  margin: -8px -12px;
+  transition: color 200ms ease;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  transition: opacity 200ms ease;
+}
+
+.labelsLeft .dot {
+  order: 1;
+}
+
+.info {
+  position: absolute;
+  left: 26px;
+  bottom: 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  animation: rise 450ms ease-out both;
+}
+
+.infoTitle {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+}
+
+.infoBlurb {
+  font-size: 16px;
+  color: #c9cedd;
+}
+
+.infoSpecs {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  color: #a9b0c3;
+}
+
+.cam {
+  position: absolute;
+  right: 32px;
+  bottom: 60px;
+  width: 176px;
+  height: 99px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #0d111c;
+  transition: opacity 300ms ease;
+  pointer-events: none;
+}
+
+.camVideo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+}
+
+video.camVideo {
+  opacity: 0.55;
+  filter: grayscale(1);
+}
+
+.hint {
+  position: absolute;
+  right: 32px;
+  bottom: 30px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: #d6dae6;
+}
+
+.statusDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #5b6380;
+}
+
+.statusDot[data-status="loading"] {
+  animation: blink 1s ease-in-out infinite;
+}
+
+.statusDot[data-status="no-camera"],
+.statusDot[data-status="error"] {
+  background: #f5c9d6;
+}
+
+.trail {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  opacity: 0.35;
+}
+
+.cursor {
+  position: fixed;
+  left: -32px;
+  top: -32px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 200ms ease;
+  filter: drop-shadow(0 0 12px rgba(191, 216, 255, 0.6));
+  will-change: transform;
+}
+
+@keyframes sway {
+  0%,
+  100% {
+    transform: rotateX(-16deg) rotateY(-40deg);
+  }
+  50% {
+    transform: rotateX(-16deg) rotateY(-12deg);
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0.3;
+  }
+}
