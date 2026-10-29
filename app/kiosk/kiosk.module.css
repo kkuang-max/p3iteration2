@@ -272,11 +272,6 @@ video.camVideo {
   color: #ffffff;
 }
 
-.camToggle[aria-pressed="false"] {
-  border-color: rgba(245, 201, 214, 0.5);
-  color: #f5c9d6;
-}
-
 .cursor {
   position: fixed;
   left: -32px;

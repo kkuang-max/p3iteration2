@@ -15,17 +15,18 @@ pointing at a part of the exploded shoe opens a short explainer for that part.
 
 Hover is the whole interaction: no clicking, holding or pinching needed.
 
-**Camera on/off:** use the `CAMERA ON` button in the bottom-right corner (or press `c`). Turning it off releases the
-webcam completely; touch, mouse hover and click keep working, so it still runs on a touchscreen or with no camera.
+**Camera view:** the camera always tracks hands, but the video of the visitor is hidden by default so nobody has to
+look at themselves. `SHOW CAMERA VIEW` in the bottom-right corner (or `c`) brings up a small preview with the tracked
+hand drawn on it, which is handy for staff setting up. With no camera, touch and mouse hover/click work the same way.
 
-Staff keys: `←/→` cycle parts, `c` toggles the camera, `f` toggles fullscreen.
+Staff keys: `←/→` cycle parts, `c` shows/hides the camera view, `f` toggles fullscreen.
 
 ## Code map
 
 - `lib/product.ts` — product name and per-part copy. Swap this to demo another product.
 - `lib/shoe.ts` — sliced 3D shoe geometry (ported from the "B · Centre stage" design reference).
 - `lib/useHandTracking.ts` — webcam + MediaPipe loop; reports the fingertip each frame; can be switched off.
-- `app/kiosk/Kiosk.tsx` — hover hit-testing, pull-apart animation, attract mode, camera toggle, layout.
+- `app/kiosk/Kiosk.tsx` — hover hit-testing, pull-apart animation, attract mode, camera view toggle, layout.
 - Tuning constants (hover settle time, easing speed, idle timeout…) are at the top of `Kiosk.tsx`.
 
 The hand model ships in `public/models/`, and `npm run dev` / `npm run build` copy the MediaPipe WASM runtime into

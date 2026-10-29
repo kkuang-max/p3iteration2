@@ -35,7 +35,7 @@ export default function Kiosk() {
   const [active, setActive] = useState<PartId>("outsole");
   const [mode, setMode] = useState<Mode>("attract");
   const [handVisible, setHandVisible] = useState(false);
-  const [cameraOn, setCameraOn] = useState(true);
+  const [showSelf, setShowSelf] = useState(false); // camera keeps tracking either way
   const [scale, setScale] = useState(1);
   const [anim, setAnim] = useState<Anim>({ explode: 0.3, focus: 0.5, pull: { ...NO_PULL, outsole: 1 } });
 
@@ -129,8 +129,8 @@ export default function Kiosk() {
     [hoverAt],
   );
 
-  const status = useHandTracking(videoRef, camCanvasRef, onHand, ACCENT, cameraOn);
-  const camOk = status !== "off" && status !== "no-camera" && status !== "error";
+  const status = useHandTracking(videoRef, camCanvasRef, onHand, ACCENT);
+  const camOk = status !== "no-camera" && status !== "error";
 
   // ---- Mouse / touch (staff testing, touchscreens, camera off) -------------
   useEffect(() => {
@@ -148,7 +148,7 @@ export default function Kiosk() {
       const i = PART_ORDER.indexOf(ix.current.active);
       if (e.key === "ArrowRight" || e.key === "ArrowDown") activate(PART_ORDER[(i + 1) % PART_ORDER.length]);
       if (e.key === "ArrowLeft" || e.key === "ArrowUp") activate(PART_ORDER[(i - 1 + PART_ORDER.length) % PART_ORDER.length]);
-      if (e.key === "c") setCameraOn((v) => !v);
+      if (e.key === "c") setShowSelf((v) => !v);
       if (e.key === "f") {
         if (document.fullscreenElement) document.exitFullscreen();
         else document.documentElement.requestFullscreen().catch(() => {});
@@ -336,7 +336,7 @@ export default function Kiosk() {
           <span className={styles.infoSpecs}>{info.specs}</span>
         </div>
 
-        <div className={styles.cam} style={{ opacity: camOk ? 1 : 0 }}>
+        <div className={styles.cam} style={{ opacity: camOk && showSelf ? 1 : 0 }}>
           <video ref={videoRef} className={styles.camVideo} muted playsInline />
           <canvas ref={camCanvasRef} width={320} height={180} className={styles.camVideo} />
         </div>
@@ -349,14 +349,16 @@ export default function Kiosk() {
             style={status === "tracking" ? { background: ACCENT, boxShadow: `0 0 10px ${ACCENT}` } : undefined}
           />
           {camOk ? "POINT / HOVER" : STATUS_TEXT[status]}
-          <button
-            type="button"
-            className={styles.camToggle}
-            aria-pressed={cameraOn}
-            onClick={() => setCameraOn((v) => !v)}
-          >
-            {cameraOn ? "CAMERA ON" : "CAMERA OFF"}
-          </button>
+          {camOk && (
+            <button
+              type="button"
+              className={styles.camToggle}
+              aria-pressed={showSelf}
+              onClick={() => setShowSelf((v) => !v)}
+            >
+              {showSelf ? "HIDE CAMERA VIEW" : "SHOW CAMERA VIEW"}
+            </button>
+          )}
         </div>
       </div>
 
@@ -375,7 +377,6 @@ export default function Kiosk() {
 }
 
 const STATUS_TEXT = {
-  off: "CAMERA OFF · TOUCH OR CLICK TO EXPLORE",
   loading: "STARTING CAMERA…",
   ready: "CAMERA READY",
   tracking: "HAND DETECTED",

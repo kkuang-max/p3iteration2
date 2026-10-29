@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import type { HandLandmarker, NormalizedLandmark } from "@mediapipe/tasks-vision";
 
-export type TrackingStatus = "off" | "loading" | "ready" | "tracking" | "no-camera" | "error";
+export type TrackingStatus = "loading" | "ready" | "tracking" | "no-camera" | "error";
 
 export type HandFrame = {
   // Index fingertip, mirrored so moving your hand right moves the cursor right. 0..1.
@@ -19,14 +19,12 @@ const MODEL_PATH = "/models/hand_landmarker.task";
  * Runs MediaPipe's hand landmarker against the webcam and calls `onFrame`
  * once per processed video frame with the tracked hand (or null when no hand
  * is visible). Landmarks are drawn onto `canvasRef` for the preview window.
- * When `enabled` is false the webcam is released entirely.
  */
 export function useHandTracking(
   videoRef: RefObject<HTMLVideoElement | null>,
   canvasRef: RefObject<HTMLCanvasElement | null>,
   onFrame: (hand: HandFrame | null) => void,
   accent: string,
-  enabled: boolean,
 ) {
   const [status, setStatus] = useState<TrackingStatus>("loading");
   const onFrameRef = useRef(onFrame);
@@ -38,7 +36,6 @@ export function useHandTracking(
   });
 
   useEffect(() => {
-    if (!enabled) return;
     const videoEl = videoRef.current;
     let cancelled = false;
     let raf = 0;
@@ -154,9 +151,8 @@ export function useHandTracking(
       if (videoEl) videoEl.srcObject = null;
       draw(undefined, []);
       onFrameRef.current(null);
-      setStatus("loading");
     };
-  }, [videoRef, canvasRef, enabled]);
+  }, [videoRef, canvasRef]);
 
-  return enabled ? status : "off";
+  return status;
 }
