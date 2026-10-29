@@ -15,18 +15,15 @@ const HOVER_SETTLE_MS = 120; // hover this long before a part pulls out (stops f
 const HOVER_GRACE_MS = 250; // keep hover through brief tracking misses at part edges
 const UNHOVER_MS = 400; // off the shoe this long → parts settle back and the shoe overview shows
 const IDLE_MS = 9000; // no one around → attract mode
-const ATTRACT_STEP_MS = 3200;
 const HAND_MARGIN = 0.12; // ignore the outer edge of the camera frame
 const SMOOTHING = 0.45;
 const TRAIL_LEN = 10;
 // Easing time constants (seconds): smaller = snappier.
-const TAU_PULL = 0.16;
-const TAU_EXPLODE = 0.35;
-// Idle shoe is only slightly closed up, so parts barely move from under a visitor's first point.
-const IDLE_EXPLODE = 0.8;
+const TAU_PULL = 0.2;
+const TAU_FOCUS = 0.3;
 
 type Mode = "attract" | "engaged";
-type Anim = { explode: number; focus: number; pull: Record<PartId, number> };
+type Anim = { focus: number; pull: Record<PartId, number> };
 
 const partAt = (x: number, y: number): PartId | null => {
   const el = document.elementFromPoint(x, y);
@@ -35,13 +32,13 @@ const partAt = (x: number, y: number): PartId | null => {
 };
 
 export default function Kiosk() {
-  const [active, setActive] = useState<PartId | null>("outsole");
+  const [active, setActive] = useState<PartId | null>(null);
   const [mode, setMode] = useState<Mode>("attract");
   const [handVisible, setHandVisible] = useState(false);
   const [cameraOn, setCameraOn] = useState(true);
   const [showSelf, setShowSelf] = useState(false); // hidden self-view; tracking still runs
   const [scale, setScale] = useState(1);
-  const [anim, setAnim] = useState<Anim>({ explode: IDLE_EXPLODE, focus: 0.5, pull: { ...NO_PULL, outsole: 1 } });
+  const [anim, setAnim] = useState<Anim>({ focus: 0, pull: NO_PULL });
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const camCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -58,7 +55,7 @@ export default function Kiosk() {
     lastHit: 0,
     lastActive: 0,
     trail: [] as [number, number][],
-    active: "outsole" as PartId | null,
+    active: null as PartId | null,
     pinned: false, // a tapped part stays open on touchscreens, which have no hover
     mode: "attract" as Mode,
   });
@@ -157,6 +154,7 @@ export default function Kiosk() {
     };
     const key = (e: KeyboardEvent) => {
       const i = ix.current.active ? PART_ORDER.indexOf(ix.current.active) : -1;
+      if (e.key.startsWith("Arrow")) ix.current.pinned = true; // keyboard picks stay until the next hover
       if (e.key === "ArrowRight" || e.key === "ArrowDown") activate(PART_ORDER[(i + 1) % PART_ORDER.length]);
       if (e.key === "ArrowLeft" || e.key === "ArrowUp") activate(PART_ORDER[(i - 1 + PART_ORDER.length) % PART_ORDER.length]);
       if (e.key === "c") setShowSelf((v) => !v);
@@ -179,23 +177,11 @@ export default function Kiosk() {
     };
   }, [activate, hoverAt]);
 
-  // ---- Attract mode: nobody around → cycle parts to catch the eye ----------
-  useEffect(() => {
-    const id = setInterval(() => {
-      const s = ix.current;
-      if (s.mode === "attract") {
-        s.active = PART_ORDER[((s.active ? PART_ORDER.indexOf(s.active) : -1) + 1) % PART_ORDER.length];
-        setActive(s.active);
-      }
-    }, ATTRACT_STEP_MS);
-    return () => clearInterval(id);
-  }, []);
-
-  // ---- Animation loop: settle hover, ease explode / pull / focus -----------
+  // ---- Animation loop: settle hover, ease pull / focus ----------------------
   useEffect(() => {
     let raf = 0;
     let last = performance.now();
-    const cur: Anim = { explode: IDLE_EXPLODE, focus: 0.5, pull: { ...NO_PULL, outsole: 1 } };
+    const cur: Anim = { focus: 0, pull: { ...NO_PULL } };
 
     const tick = (now: number) => {
       raf = requestAnimationFrame(tick);
@@ -209,12 +195,15 @@ export default function Kiosk() {
       } else if (!s.hoverPart && s.active && s.mode === "engaged" && !s.pinned && now - s.hoverSince >= UNHOVER_MS) {
         activate(null);
       }
+      // Nobody around: back to the whole, gently swaying shoe.
       if (s.mode === "engaged" && !s.hasPos && now - s.lastActive > IDLE_MS) {
         s.mode = "attract";
+        s.active = null;
+        s.pinned = false;
         setMode("attract");
+        setActive(null);
       }
 
-      const engaged = s.mode === "engaged";
       const ease = (from: number, to: number, tau: number) => {
         const v = from + (to - from) * (1 - Math.exp(-dt / tau));
         return Math.abs(to - v) < 0.002 ? to : v;
@@ -225,10 +214,9 @@ export default function Kiosk() {
         if (v !== from) changed = true;
         return v;
       };
-      cur.explode = step(cur.explode, engaged ? 1 : IDLE_EXPLODE, TAU_EXPLODE);
-      cur.focus = step(cur.focus, !s.active ? 0 : engaged ? 1 : 0.5, TAU_EXPLODE);
+      cur.focus = step(cur.focus, s.active ? 1 : 0, TAU_FOCUS);
       for (const id of PART_ORDER) cur.pull[id] = step(cur.pull[id], id === s.active ? 1 : 0, TAU_PULL);
-      if (changed) setAnim({ explode: cur.explode, focus: cur.focus, pull: { ...cur.pull } });
+      if (changed) setAnim({ focus: cur.focus, pull: { ...cur.pull } });
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);

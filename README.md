@@ -8,11 +8,11 @@ pointing at a part of the exploded shoe opens a short explainer for that part.
 
 | Visitor does | Kiosk does |
 | --- | --- |
-| Nobody around (9 s) | **Attract mode**: shoe sits assembled and cycles through parts to catch the eye |
-| Raises a hand | Shoe explodes apart; a cursor follows the index fingertip |
-| Moves over a part (or its label) | That part smoothly pulls further out of the shoe, glows, and the rest fade back; its info appears bottom-left |
-| Moves to another part | The first part eases back in and the new one slides out |
-| Moves off the shoe | All parts settle back into place and the panel shows an overview of the whole shoe |
+| Nobody around | The whole shoe sways gently with an overview of the product |
+| Raises a hand | A cursor follows the index fingertip and the shoe holds still |
+| Moves over a part (or its label) | Just that piece breaks away from the shoe (attached pieces ride along), glows, and the rest fade back; its info appears bottom-left |
+| Moves to another part | The first piece slots back in and the new one breaks away |
+| Moves off the shoe | The shoe is whole again and the panel shows the overview |
 
 Hover is the whole interaction: no clicking, holding or pinching needed.
 

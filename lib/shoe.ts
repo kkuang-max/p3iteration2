@@ -42,26 +42,23 @@ const GEOM: PartGeom[] = [
   { id: "outsole", d: "M58,262 L548,262 Q578,262 580,244 L580,238 L52,238 Q44,250 58,262 Z", hd: 76, k: 0.1, o: [316, 250], tp: 239, sole: true },
 ];
 
-// Where each part sits in the exploded view.
-const OFFSETS: Record<PartId, [number, number]> = {
-  upper: [0, 0],
-  heel: [-56, -6],
-  toe: [46, -10],
-  tongue: [-10, -62],
-  laces: [10, -40],
-  midsole: [0, 42],
-  outsole: [0, 84],
+// How far [dx, dy, grow] each part breaks away from the assembled shoe when hovered.
+const PULL: Record<PartId, [number, number, number]> = {
+  upper: [0, -64, 0.04],
+  heel: [-74, -14, 0.06],
+  toe: [70, -18, 0.06],
+  tongue: [-14, -92, 0.08],
+  laces: [16, -66, 0.06],
+  midsole: [0, 58, 0.03],
+  outsole: [0, 96, 0.03],
 };
 
-// Extra travel [dx, dy, grow] when a part is pulled out on hover.
-const PULL: Record<PartId, [number, number, number]> = {
-  upper: [0, -16, 0.05],
-  heel: [-52, -12, 0.06],
-  toe: [52, -14, 0.06],
-  tongue: [-10, -56, 0.08],
-  laces: [14, -40, 0.06],
-  midsole: [0, 34, 0.03],
-  outsole: [0, 52, 0.03],
+// Pieces attached to a pulled part travel with it, so nothing ends up buried:
+// the tongue and laces ride on the upper, the outsole drops with the midsole.
+const CARRY: Partial<Record<PartId, { by: PartId; d: [number, number] }[]>> = {
+  tongue: [{ by: "upper", d: [0, -64] }],
+  laces: [{ by: "upper", d: [0, -64] }],
+  outsole: [{ by: "midsole", d: [0, 58] }],
 };
 
 export const NO_PULL = Object.fromEntries(GEOM.map((p) => [p.id, 0])) as Record<PartId, number>;
@@ -76,7 +73,6 @@ const mix = (a: string, b: string, t: number) =>
 export type ShoeOptions = {
   w: number;
   accent: string;
-  explode: number; // 0 assembled → 1 exploded
   pull: Record<PartId, number>; // 0..1 per part, animated
   focus: number; // 0..1, how far the parts that aren't pulled out fade back
 };
@@ -84,9 +80,12 @@ export type ShoeOptions = {
 const partTransform = (p: PartGeom, o: ShoeOptions, s: number) => {
   const pull = o.pull[p.id];
   const [px, py, grow] = PULL[p.id];
-  const [ox, oy] = OFFSETS[p.id];
-  const dx = ox * o.explode + px * pull;
-  const dy = oy * o.explode + py * pull;
+  let dx = px * pull;
+  let dy = py * pull;
+  for (const c of CARRY[p.id] ?? []) {
+    dx += c.d[0] * o.pull[c.by];
+    dy += c.d[1] * o.pull[c.by];
+  }
   const sc = s * (1 + grow * pull);
   return `translate(${dx.toFixed(1)},${dy.toFixed(1)}) translate(${p.o[0]},${p.o[1]}) scale(${sc.toFixed(3)}) translate(${-p.o[0]},${-p.o[1]})`;
 };
