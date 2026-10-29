@@ -12,6 +12,12 @@ export type PartInfo = {
 export const PRODUCT = {
   name: "STRIDE ONE",
   tagline: "INTERACTIVE EXHIBIT",
+  // Shown when no part is hovered.
+  overview: {
+    label: "STRIDE ONE",
+    blurb: "A lightweight everyday runner built from seven parts, each tuned for comfort, support and grip.",
+    specs: "[DAILY TRAINER] · 248 G · 8 MM DROP",
+  },
 };
 
 export const PARTS: Record<PartId, PartInfo> = {

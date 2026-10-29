@@ -62,7 +62,11 @@ export function useHandTracking(
         if (!cancelled) setStatus("no-camera");
         return;
       }
-      if (cancelled) return;
+      if (cancelled) {
+        // Switched off while the camera was still starting: release it.
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
       video.srcObject = stream;
       await video.play().catch(() => {});
 

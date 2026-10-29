@@ -12,6 +12,7 @@ pointing at a part of the exploded shoe opens a short explainer for that part.
 | Raises a hand | Shoe explodes apart; a cursor follows the index fingertip |
 | Moves over a part (or its label) | That part smoothly pulls further out of the shoe, glows, and the rest fade back; its info appears bottom-left |
 | Moves to another part | The first part eases back in and the new one slides out |
+| Moves off the shoe | All parts settle back into place and the panel shows an overview of the whole shoe |
 
 Hover is the whole interaction: no clicking, holding or pinching needed.
 
