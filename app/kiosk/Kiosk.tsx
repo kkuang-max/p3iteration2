@@ -35,7 +35,8 @@ export default function Kiosk() {
   const [active, setActive] = useState<PartId>("outsole");
   const [mode, setMode] = useState<Mode>("attract");
   const [handVisible, setHandVisible] = useState(false);
-  const [showSelf, setShowSelf] = useState(false); // camera keeps tracking either way
+  const [cameraOn, setCameraOn] = useState(true);
+  const [showSelf, setShowSelf] = useState(false); // hidden self-view; tracking still runs
   const [scale, setScale] = useState(1);
   const [anim, setAnim] = useState<Anim>({ explode: 0.3, focus: 0.5, pull: { ...NO_PULL, outsole: 1 } });
 
@@ -129,8 +130,8 @@ export default function Kiosk() {
     [hoverAt],
   );
 
-  const status = useHandTracking(videoRef, camCanvasRef, onHand, ACCENT);
-  const camOk = status !== "no-camera" && status !== "error";
+  const status = useHandTracking(videoRef, camCanvasRef, onHand, ACCENT, cameraOn);
+  const camOk = status !== "off" && status !== "no-camera" && status !== "error";
 
   // ---- Mouse / touch (staff testing, touchscreens, camera off) -------------
   useEffect(() => {
@@ -149,6 +150,7 @@ export default function Kiosk() {
       if (e.key === "ArrowRight" || e.key === "ArrowDown") activate(PART_ORDER[(i + 1) % PART_ORDER.length]);
       if (e.key === "ArrowLeft" || e.key === "ArrowUp") activate(PART_ORDER[(i - 1 + PART_ORDER.length) % PART_ORDER.length]);
       if (e.key === "c") setShowSelf((v) => !v);
+      if (e.key === "o") setCameraOn((v) => !v);
       if (e.key === "f") {
         if (document.fullscreenElement) document.exitFullscreen();
         else document.documentElement.requestFullscreen().catch(() => {});
@@ -359,6 +361,15 @@ export default function Kiosk() {
               {showSelf ? "HIDE CAMERA VIEW" : "SHOW CAMERA VIEW"}
             </button>
           )}
+          <button
+            type="button"
+            className={styles.camToggle}
+            aria-pressed={!cameraOn}
+            data-off={cameraOn ? undefined : ""}
+            onClick={() => setCameraOn((v) => !v)}
+          >
+            {cameraOn ? "TURN CAMERA OFF" : "TURN CAMERA ON"}
+          </button>
         </div>
       </div>
 
@@ -377,6 +388,7 @@ export default function Kiosk() {
 }
 
 const STATUS_TEXT = {
+  off: "CAMERA OFF · TOUCH OR CLICK TO EXPLORE",
   loading: "STARTING CAMERA…",
   ready: "CAMERA READY",
   tracking: "HAND DETECTED",

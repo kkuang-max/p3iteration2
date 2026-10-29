@@ -17,9 +17,12 @@ Hover is the whole interaction: no clicking, holding or pinching needed.
 
 **Camera view:** the camera always tracks hands, but the video of the visitor is hidden by default so nobody has to
 look at themselves. `SHOW CAMERA VIEW` in the bottom-right corner (or `c`) brings up a small preview with the tracked
-hand drawn on it, which is handy for staff setting up. With no camera, touch and mouse hover/click work the same way.
+hand drawn on it, which is handy for staff setting up.
 
-Staff keys: `←/→` cycle parts, `c` shows/hides the camera view, `f` toggles fullscreen.
+**Camera on/off:** `TURN CAMERA OFF` (or `o`) releases the webcam entirely. Touch and mouse hover/click keep working the
+same way, so it still runs on a touchscreen or with no camera. `TURN CAMERA ON` starts tracking again.
+
+Staff keys: `←/→` cycle parts, `c` shows/hides the camera view, `o` turns the camera off/on, `f` toggles fullscreen.
 
 ## Code map
 
