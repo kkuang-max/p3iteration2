@@ -80,6 +80,7 @@
   border-radius: 50%;
   background: rgba(0, 0, 0, 0.45);
   filter: blur(18px);
+  animation: shadow-float 5s ease-in-out infinite;
 }
 
 .shoeWrap {
@@ -89,6 +90,7 @@
   width: 700px;
   height: 542px;
   perspective: 1800px;
+  animation: float 5s ease-in-out infinite;
 }
 
 .shoe {
@@ -99,7 +101,7 @@
   height: 542px;
   transform-style: preserve-3d;
   transform: rotateX(-16deg) rotateY(-28deg);
-  animation: sway 12s ease-in-out infinite;
+  animation: sway 9s ease-in-out infinite;
 }
 
 .slice {
@@ -302,10 +304,33 @@ video.camVideo {
 @keyframes sway {
   0%,
   100% {
-    transform: rotateX(-16deg) rotateY(-40deg);
+    transform: rotateX(-14deg) rotateY(-42deg) rotateZ(1deg);
   }
   50% {
-    transform: rotateX(-16deg) rotateY(-12deg);
+    transform: rotateX(-18deg) rotateY(-14deg) rotateZ(-1deg);
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-12px);
+  }
+}
+
+/* The shadow tightens and lightens as the shoe floats up. */
+@keyframes shadow-float {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(0.88);
+    opacity: 0.7;
   }
 }
 

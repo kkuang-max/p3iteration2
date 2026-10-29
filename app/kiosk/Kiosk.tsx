@@ -236,6 +236,7 @@ export default function Kiosk() {
 
   const info = active ? PARTS[active] : PRODUCT.overview;
   const engaged = mode === "engaged";
+  const motion = active ? "paused" : "running";
   const headline = !engaged
     ? camOk
       ? "WAVE YOUR HAND TO EXPLORE"
@@ -276,10 +277,11 @@ export default function Kiosk() {
           <span className={styles.headlineSub}>{subline}</span>
         </div>
 
-        <div className={styles.shadow} />
-        <div className={styles.shoeWrap}>
-          {/* Sway only while idle: a still shoe keeps parts from drifting out from under the cursor. */}
-          <div className={styles.shoe} style={{ animationPlayState: engaged ? "paused" : "running" }}>
+        {/* The whole shoe sways and floats while no part is open; it holds still while one is,
+            so the open piece doesn't drift out from under the cursor. */}
+        <div className={styles.shadow} style={{ animationPlayState: motion }} />
+        <div className={styles.shoeWrap} style={{ animationPlayState: motion }}>
+          <div className={styles.shoe} style={{ animationPlayState: motion }}>
             {slices.map((sl, i) => (
               <svg
                 key={i}
