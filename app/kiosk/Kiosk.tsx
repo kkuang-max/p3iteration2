@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { buildShoe } from "@/lib/shoe";
+import { buildHitLayers, buildShoe, NO_PULL } from "@/lib/shoe";
 import { LEFT_LABELS, PARTS, PART_ORDER, PRODUCT, RIGHT_LABELS, type PartId } from "@/lib/product";
 import { useHandTracking, type HandFrame } from "@/lib/useHandTracking";
 import styles from "./kiosk.module.css";
@@ -11,20 +11,19 @@ const STAGE_W = 1280;
 const STAGE_H = 720;
 
 // Interaction tuning.
-const DWELL_MS = 850; // hold over a part this long to open it
-const SWIPE_SPEED = 1.1; // screen-widths per second that counts as a swipe
-const SWIPE_COOLDOWN_MS = 450;
-const PINCH_ON = 0.28; // thumb–index distance / palm size
-const PINCH_OFF = 0.42;
+const HOVER_SETTLE_MS = 120; // hover this long before a part pulls out (stops flicker when sweeping across)
+const HOVER_GRACE_MS = 250; // keep hover through brief tracking misses at part edges
 const IDLE_MS = 9000; // no one around → attract mode
 const ATTRACT_STEP_MS = 3200;
 const HAND_MARGIN = 0.12; // ignore the outer edge of the camera frame
 const SMOOTHING = 0.45;
 const TRAIL_LEN = 10;
-const HOVER_GRACE_MS = 250; // keep hover through brief misses at part edges
-const TELEPORT = 0.25; // a jump this far (screen widths) in one frame is a tracking glitch, not a swipe
+// Easing time constants (seconds): smaller = snappier.
+const TAU_PULL = 0.16;
+const TAU_EXPLODE = 0.35;
 
 type Mode = "attract" | "engaged";
+type Anim = { explode: number; focus: number; pull: Record<PartId, number> };
 
 const partAt = (x: number, y: number): PartId | null => {
   const el = document.elementFromPoint(x, y);
@@ -33,50 +32,50 @@ const partAt = (x: number, y: number): PartId | null => {
 };
 
 export default function Kiosk() {
-  const [selected, setSelected] = useState<PartId>("outsole");
-  const [hover, setHover] = useState<PartId | null>(null);
+  const [active, setActive] = useState<PartId>("outsole");
   const [mode, setMode] = useState<Mode>("attract");
   const [handVisible, setHandVisible] = useState(false);
-  const [explode, setExplode] = useState(0.3);
+  const [cameraOn, setCameraOn] = useState(true);
   const [scale, setScale] = useState(1);
-  const [showCam, setShowCam] = useState(true);
+  const [anim, setAnim] = useState<Anim>({ explode: 0.3, focus: 0.5, pull: { ...NO_PULL, outsole: 1 } });
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const camCanvasRef = useRef<HTMLCanvasElement>(null);
   const cursorRef = useRef<HTMLDivElement>(null);
-  const dwellRef = useRef<SVGCircleElement>(null);
   const trailRef = useRef<SVGPolylineElement>(null);
 
   // Mutable interaction state that changes every frame and shouldn't re-render.
   const ix = useRef({
     x: 0,
     y: 0,
-    t: 0,
     hasPos: false,
     hoverPart: null as PartId | null,
     hoverSince: 0,
     lastHit: 0,
-    dwellDone: false,
-    lastSwipe: 0,
-    pinching: false,
     lastActive: 0,
     trail: [] as [number, number][],
+    active: "outsole" as PartId,
+    mode: "attract" as Mode,
   });
 
-  const select = useCallback((part: PartId) => {
-    ix.current.lastActive = performance.now();
+  const activate = useCallback((part: PartId) => {
+    const s = ix.current;
+    s.lastActive = performance.now();
+    s.active = part;
+    s.mode = "engaged";
     setMode("engaged");
-    setSelected(part);
+    setActive(part);
   }, []);
 
-  const updateHover = useCallback((part: PartId | null, now: number) => {
+  const hoverAt = useCallback((part: PartId | null, now: number) => {
     const s = ix.current;
+    if (part) s.lastHit = now;
+    else if (now - s.lastHit < HOVER_GRACE_MS) part = s.hoverPart;
     if (part !== s.hoverPart) {
       s.hoverPart = part;
       s.hoverSince = now;
-      s.dwellDone = false;
-      setHover(part);
     }
+    cursorRef.current?.toggleAttribute("data-over", !!part);
   }, []);
 
   // ---- Hand input -------------------------------------------------------
@@ -92,36 +91,30 @@ export default function Kiosk() {
           s.trail = [];
           trailRef.current?.setAttribute("points", "");
           cursor?.style.setProperty("opacity", "0");
-          updateHover(null, now);
+          s.lastHit = 0;
+          hoverAt(null, now);
           setHandVisible(false);
         }
         return;
       }
 
-      const vw = window.innerWidth;
-      const vh = window.innerHeight;
       const span = 1 - HAND_MARGIN * 2;
-      const tx = Math.min(Math.max((hand.x - HAND_MARGIN) / span, 0), 1) * vw;
-      const ty = Math.min(Math.max((hand.y - HAND_MARGIN) / span, 0), 1) * vh;
+      const tx = Math.min(Math.max((hand.x - HAND_MARGIN) / span, 0), 1) * window.innerWidth;
+      const ty = Math.min(Math.max((hand.y - HAND_MARGIN) / span, 0), 1) * window.innerHeight;
 
       if (!s.hasPos) {
         s.x = tx;
         s.y = ty;
-        s.t = now;
         s.hasPos = true;
         setHandVisible(true);
       }
-      const px = s.x;
-      const py = s.y;
-      const dt = Math.max(now - s.t, 1) / 1000;
       s.x += (tx - s.x) * (1 - SMOOTHING);
       s.y += (ty - s.y) * (1 - SMOOTHING);
-      s.t = now;
       s.lastActive = now;
-      const jump = Math.hypot(tx - px, ty - py) / vw;
-      const speed = jump > TELEPORT ? 0 : Math.hypot(s.x - px, s.y - py) / dt / vw;
-
-      setMode("engaged");
+      if (s.mode !== "engaged") {
+        s.mode = "engaged";
+        setMode("engaged");
+      }
 
       if (cursor) {
         cursor.style.opacity = "1";
@@ -131,105 +124,98 @@ export default function Kiosk() {
       if (s.trail.length > TRAIL_LEN) s.trail.shift();
       trailRef.current?.setAttribute("points", s.trail.map((p) => p.join(",")).join(" "));
 
-      let part = partAt(s.x, s.y);
-      if (part) s.lastHit = now;
-      else if (now - s.lastHit < HOVER_GRACE_MS) part = s.hoverPart;
-      updateHover(part, now);
-
-      // Swiping across a part opens it straight away.
-      if (part && speed > SWIPE_SPEED && now - s.lastSwipe > SWIPE_COOLDOWN_MS) {
-        s.lastSwipe = now;
-        s.dwellDone = true;
-        select(part);
-      }
-
-      // Pinch (thumb to index) is a quick "click".
-      if (!s.pinching && hand.pinch < PINCH_ON) {
-        s.pinching = true;
-        if (part) {
-          s.dwellDone = true;
-          select(part);
-        }
-      } else if (s.pinching && hand.pinch > PINCH_OFF) {
-        s.pinching = false;
-      }
-
-      // Holding still over a part fills the dwell ring, then opens it.
-      const progress = part && !s.dwellDone ? Math.min((now - s.hoverSince) / DWELL_MS, 1) : 0;
-      dwellRef.current?.style.setProperty("stroke-dashoffset", String(1 - progress));
-      if (part && !s.dwellDone && progress >= 1) {
-        s.dwellDone = true;
-        select(part);
-      }
+      hoverAt(partAt(s.x, s.y), now);
     },
-    [select, updateHover],
+    [hoverAt],
   );
 
-  const status = useHandTracking(videoRef, camCanvasRef, onHand, ACCENT);
+  const status = useHandTracking(videoRef, camCanvasRef, onHand, ACCENT, cameraOn);
+  const camOk = status !== "off" && status !== "no-camera" && status !== "error";
 
-  // ---- Mouse / touch fallback (staff testing, touchscreens) ---------------
+  // ---- Mouse / touch (staff testing, touchscreens, camera off) -------------
   useEffect(() => {
     const move = (e: PointerEvent) => {
       if (ix.current.hasPos) return; // a tracked hand takes priority
       ix.current.lastActive = performance.now();
-      updateHover(partAt(e.clientX, e.clientY), performance.now());
+      hoverAt(partAt(e.clientX, e.clientY), performance.now());
     };
     const down = (e: PointerEvent) => {
       const part = partAt(e.clientX, e.clientY);
-      if (part) select(part);
+      if (part) activate(part);
       else ix.current.lastActive = performance.now();
     };
     const key = (e: KeyboardEvent) => {
-      const i = PART_ORDER.indexOf(selected);
-      if (e.key === "ArrowRight" || e.key === "ArrowDown") select(PART_ORDER[(i + 1) % PART_ORDER.length]);
-      if (e.key === "ArrowLeft" || e.key === "ArrowUp") select(PART_ORDER[(i - 1 + PART_ORDER.length) % PART_ORDER.length]);
-      if (e.key === "c") setShowCam((v) => !v);
+      const i = PART_ORDER.indexOf(ix.current.active);
+      if (e.key === "ArrowRight" || e.key === "ArrowDown") activate(PART_ORDER[(i + 1) % PART_ORDER.length]);
+      if (e.key === "ArrowLeft" || e.key === "ArrowUp") activate(PART_ORDER[(i - 1 + PART_ORDER.length) % PART_ORDER.length]);
+      if (e.key === "c") setCameraOn((v) => !v);
       if (e.key === "f") {
         if (document.fullscreenElement) document.exitFullscreen();
         else document.documentElement.requestFullscreen().catch(() => {});
       }
     };
+    const leave = () => hoverAt(null, 0);
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerdown", down);
     window.addEventListener("keydown", key);
+    document.documentElement.addEventListener("pointerleave", leave);
     return () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerdown", down);
       window.removeEventListener("keydown", key);
+      document.documentElement.removeEventListener("pointerleave", leave);
     };
-  }, [select, updateHover, selected]);
+  }, [activate, hoverAt]);
 
   // ---- Attract mode: nobody around → cycle parts to catch the eye ----------
   useEffect(() => {
     const id = setInterval(() => {
-      if (!ix.current.hasPos && performance.now() - ix.current.lastActive > IDLE_MS) setMode("attract");
-    }, 500);
+      const s = ix.current;
+      if (s.mode === "attract") {
+        s.active = PART_ORDER[(PART_ORDER.indexOf(s.active) + 1) % PART_ORDER.length];
+        setActive(s.active);
+      }
+    }, ATTRACT_STEP_MS);
     return () => clearInterval(id);
   }, []);
 
+  // ---- Animation loop: settle hover, ease explode / pull / focus -----------
   useEffect(() => {
-    if (mode !== "attract") return;
-    const id = setInterval(() => {
-      setSelected((cur) => PART_ORDER[(PART_ORDER.indexOf(cur) + 1) % PART_ORDER.length]);
-    }, ATTRACT_STEP_MS);
-    return () => clearInterval(id);
-  }, [mode]);
-
-  // ---- Explode: assembled while idle, fully exploded once someone engages --
-  useEffect(() => {
-    const target = mode === "engaged" ? 1 : 0.3;
     let raf = 0;
-    let cur = explode;
-    const tick = () => {
-      cur += (target - cur) * 0.08;
-      if (Math.abs(target - cur) < 0.004) cur = target;
-      setExplode(cur);
-      if (cur !== target) raf = requestAnimationFrame(tick);
+    let last = performance.now();
+    const cur: Anim = { explode: 0.3, focus: 0.5, pull: { ...NO_PULL, outsole: 1 } };
+
+    const tick = (now: number) => {
+      raf = requestAnimationFrame(tick);
+      const s = ix.current;
+      const dt = Math.min((now - last) / 1000, 0.1);
+      last = now;
+
+      if (s.hoverPart && s.hoverPart !== s.active && now - s.hoverSince >= HOVER_SETTLE_MS) activate(s.hoverPart);
+      if (s.mode === "engaged" && !s.hasPos && now - s.lastActive > IDLE_MS) {
+        s.mode = "attract";
+        setMode("attract");
+      }
+
+      const engaged = s.mode === "engaged";
+      const ease = (from: number, to: number, tau: number) => {
+        const v = from + (to - from) * (1 - Math.exp(-dt / tau));
+        return Math.abs(to - v) < 0.002 ? to : v;
+      };
+      let changed = false;
+      const step = (from: number, to: number, tau: number) => {
+        const v = ease(from, to, tau);
+        if (v !== from) changed = true;
+        return v;
+      };
+      cur.explode = step(cur.explode, engaged ? 1 : 0.3, TAU_EXPLODE);
+      cur.focus = step(cur.focus, engaged ? 1 : 0.5, TAU_EXPLODE);
+      for (const id of PART_ORDER) cur.pull[id] = step(cur.pull[id], id === s.active ? 1 : 0, TAU_PULL);
+      if (changed) setAnim({ explode: cur.explode, focus: cur.focus, pull: { ...cur.pull } });
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-run when the target changes
-  }, [mode]);
+  }, [activate]);
 
   // ---- Fit the 1280×720 artboard to any screen -----------------------------
   useEffect(() => {
@@ -239,43 +225,32 @@ export default function Kiosk() {
     return () => window.removeEventListener("resize", fit);
   }, []);
 
-  const slices = useMemo(
-    () => buildShoe({ w: 700, accent: ACCENT, explode, sel: selected, hover }),
-    [explode, selected, hover],
-  );
+  const shoeOpts = useMemo(() => ({ w: 700, accent: ACCENT, ...anim }), [anim]);
+  const slices = useMemo(() => buildShoe(shoeOpts), [shoeOpts]);
+  const hitLayers = useMemo(() => buildHitLayers(shoeOpts), [shoeOpts]);
 
-  const info = PARTS[selected];
+  const info = PARTS[active];
   const engaged = mode === "engaged";
-  const camOk = status !== "no-camera" && status !== "error";
   const headline = !engaged
     ? camOk
       ? "WAVE YOUR HAND TO EXPLORE"
-      : "TAP TO EXPLORE"
+      : "TOUCH TO EXPLORE"
     : !camOk
-      ? "TAP A PART"
+      ? "HOVER OVER A PART"
       : handVisible
         ? "POINT AT A PART"
         : "STEP IN AND RAISE A HAND";
   const subline = !engaged
     ? "Every part of this shoe has a story. Take a look inside."
     : camOk
-      ? "Hold still to open it, or swipe straight across it."
-      : "Tap any part of the shoe, or its name.";
+      ? "Move over any part to pull it out."
+      : "Move over any part, or tap its name.";
 
   const label = (id: PartId) => {
-    const on = id === selected;
-    const hov = id === hover && !on;
+    const on = id === active;
     return (
-      <span
-        key={id}
-        data-part={id}
-        className={styles.label}
-        style={{ color: on ? "#FFFFFF" : hov ? "#DCE6FF" : undefined, fontWeight: on ? 700 : 500 }}
-      >
-        <span
-          className={styles.dot}
-          style={{ background: ACCENT, boxShadow: `0 0 10px ${ACCENT}`, opacity: on ? 1 : hov ? 0.5 : 0 }}
-        />
+      <span key={id} data-part={id} className={styles.label} style={{ color: on ? "#FFFFFF" : undefined, fontWeight: on ? 700 : 500 }}>
+        <span className={styles.dot} style={{ background: ACCENT, boxShadow: `0 0 10px ${ACCENT}`, opacity: on ? 1 : 0 }} />
         {PARTS[id].label}
       </span>
     );
@@ -312,7 +287,6 @@ export default function Kiosk() {
                 {sl.parts.map((pt) => (
                   <path
                     key={pt.key}
-                    data-part={pt.hit ? pt.part : undefined}
                     d={pt.d}
                     transform={pt.tf}
                     fill={pt.fill}
@@ -321,7 +295,31 @@ export default function Kiosk() {
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     opacity={pt.op}
-                    style={{ pointerEvents: pt.hit ? "visiblePainted" : "none" }}
+                  />
+                ))}
+              </svg>
+            ))}
+            {hitLayers.map((layer) => (
+              <svg
+                key={layer.key}
+                viewBox="0 -110 620 480"
+                width="700"
+                height="542"
+                aria-hidden="true"
+                className={styles.slice}
+                style={{ transform: `translateZ(${layer.z}px)` }}
+              >
+                {layer.paths.map((hp) => (
+                  <path
+                    key={hp.key}
+                    data-part={layer.part}
+                    d={hp.d}
+                    transform={hp.tf}
+                    fill="transparent"
+                    stroke="transparent"
+                    strokeWidth={hp.lace ? 18 : 6}
+                    strokeLinecap="round"
+                    className={styles.hit}
                   />
                 ))}
               </svg>
@@ -332,13 +330,13 @@ export default function Kiosk() {
         <div className={styles.labelsLeft}>{LEFT_LABELS.map(label)}</div>
         <div className={styles.labelsRight}>{RIGHT_LABELS.map(label)}</div>
 
-        <div key={selected} className={styles.info}>
+        <div key={active} className={styles.info}>
           <span className={styles.infoTitle}>{info.label}</span>
           <span className={styles.infoBlurb}>{info.blurb}</span>
           <span className={styles.infoSpecs}>{info.specs}</span>
         </div>
 
-        <div className={styles.cam} style={{ opacity: showCam && camOk ? 1 : 0 }}>
+        <div className={styles.cam} style={{ opacity: camOk ? 1 : 0 }}>
           <video ref={videoRef} className={styles.camVideo} muted playsInline />
           <canvas ref={camCanvasRef} width={320} height={180} className={styles.camVideo} />
         </div>
@@ -350,7 +348,15 @@ export default function Kiosk() {
             title={STATUS_TEXT[status]}
             style={status === "tracking" ? { background: ACCENT, boxShadow: `0 0 10px ${ACCENT}` } : undefined}
           />
-          {camOk ? "SWIPE / POINT / WAVE" : STATUS_TEXT[status]}
+          {camOk ? "POINT / HOVER" : STATUS_TEXT[status]}
+          <button
+            type="button"
+            className={styles.camToggle}
+            aria-pressed={cameraOn}
+            onClick={() => setCameraOn((v) => !v)}
+          >
+            {cameraOn ? "CAMERA ON" : "CAMERA OFF"}
+          </button>
         </div>
       </div>
 
@@ -361,19 +367,7 @@ export default function Kiosk() {
       <div ref={cursorRef} className={styles.cursor} aria-hidden="true">
         <svg width="64" height="64" viewBox="-32 -32 64 64">
           <circle r="9" fill={ACCENT} />
-          <circle r="22" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="3" />
-          <circle
-            ref={dwellRef}
-            r="22"
-            fill="none"
-            stroke={ACCENT}
-            strokeWidth="3"
-            pathLength={1}
-            strokeDasharray="1"
-            strokeDashoffset="1"
-            transform="rotate(-90)"
-            strokeLinecap="round"
-          />
+          <circle r="22" fill="none" stroke={ACCENT} strokeWidth="3" className={styles.cursorRing} />
         </svg>
       </div>
     </div>
@@ -381,6 +375,7 @@ export default function Kiosk() {
 }
 
 const STATUS_TEXT = {
+  off: "CAMERA OFF · TOUCH OR CLICK TO EXPLORE",
   loading: "STARTING CAMERA…",
   ready: "CAMERA READY",
   tracking: "HAND DETECTED",

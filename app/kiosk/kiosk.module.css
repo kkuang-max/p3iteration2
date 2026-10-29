@@ -110,8 +110,9 @@
   pointer-events: none;
 }
 
-.slice path {
-  transition: stroke 200ms ease;
+/* Invisible hit shapes; the visible slices never take pointer events. */
+.hit {
+  pointer-events: all;
 }
 
 .labelsLeft,
@@ -252,6 +253,30 @@ video.camVideo {
   opacity: 0.35;
 }
 
+.camToggle {
+  margin-left: 6px;
+  padding: 6px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #d6dae6;
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  cursor: pointer;
+  transition: background 200ms ease, border-color 200ms ease, color 200ms ease;
+}
+
+.camToggle:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+.camToggle[aria-pressed="false"] {
+  border-color: rgba(245, 201, 214, 0.5);
+  color: #f5c9d6;
+}
+
 .cursor {
   position: fixed;
   left: -32px;
@@ -261,6 +286,17 @@ video.camVideo {
   transition: opacity 200ms ease;
   filter: drop-shadow(0 0 12px rgba(191, 216, 255, 0.6));
   will-change: transform;
+}
+
+.cursorRing {
+  opacity: 0.25;
+  transform: scale(0.8);
+  transition: transform 220ms ease, opacity 220ms ease;
+}
+
+.cursor[data-over] .cursorRing {
+  opacity: 1;
+  transform: scale(1);
 }
 
 @keyframes sway {

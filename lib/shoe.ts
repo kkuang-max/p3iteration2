@@ -17,17 +17,20 @@ type PartGeom = {
 
 export type SlicePath = {
   key: string;
-  part: PartId;
   d: string;
   tf: string;
   fill: string;
   stroke: string;
   sw: number;
   op: number;
-  hit: boolean;
 };
 
 export type Slice = { z: string; parts: SlicePath[] };
+
+// Invisible hit shapes per part, at its front, middle and back so the whole
+// extruded volume responds. They cover the part's resting spot *and* where it
+// has been pulled to, so a part sliding out from under the cursor keeps its hover.
+export type HitLayer = { key: string; part: PartId; z: string; paths: { key: string; d: string; tf: string; lace: boolean }[] };
 
 const GEOM: PartGeom[] = [
   { id: "upper", d: "M56,212 L64,118 Q68,90 96,86 L168,84 Q196,104 228,110 L340,128 Q440,146 506,170 Q560,190 566,212 L120,206 Z", hd: 70, k: 0.22, o: [310, 206], tp: 86 },
@@ -39,6 +42,7 @@ const GEOM: PartGeom[] = [
   { id: "outsole", d: "M58,262 L548,262 Q578,262 580,244 L580,238 L52,238 Q44,250 58,262 Z", hd: 76, k: 0.1, o: [316, 250], tp: 239, sole: true },
 ];
 
+// Where each part sits in the exploded view.
 const OFFSETS: Record<PartId, [number, number]> = {
   upper: [0, 0],
   heel: [-56, -6],
@@ -48,6 +52,19 @@ const OFFSETS: Record<PartId, [number, number]> = {
   midsole: [0, 42],
   outsole: [0, 84],
 };
+
+// Extra travel [dx, dy, grow] when a part is pulled out on hover.
+const PULL: Record<PartId, [number, number, number]> = {
+  upper: [0, -16, 0.05],
+  heel: [-52, -12, 0.06],
+  toe: [52, -14, 0.06],
+  tongue: [-10, -56, 0.08],
+  laces: [14, -40, 0.06],
+  midsole: [0, 34, 0.03],
+  outsole: [0, 52, 0.03],
+};
+
+export const NO_PULL = Object.fromEntries(GEOM.map((p) => [p.id, 0])) as Record<PartId, number>;
 
 const hx = (h: string) => [1, 3, 5].map((i) => parseInt(h.substr(i, 2), 16));
 const mix = (a: string, b: string, t: number) =>
@@ -59,9 +76,19 @@ const mix = (a: string, b: string, t: number) =>
 export type ShoeOptions = {
   w: number;
   accent: string;
-  explode: number;
-  sel: PartId | null;
-  hover: PartId | null;
+  explode: number; // 0 assembled → 1 exploded
+  pull: Record<PartId, number>; // 0..1 per part, animated
+  focus: number; // 0..1, how far the parts that aren't pulled out fade back
+};
+
+const partTransform = (p: PartGeom, o: ShoeOptions, s: number) => {
+  const pull = o.pull[p.id];
+  const [px, py, grow] = PULL[p.id];
+  const [ox, oy] = OFFSETS[p.id];
+  const dx = ox * o.explode + px * pull;
+  const dy = oy * o.explode + py * pull;
+  const sc = s * (1 + grow * pull);
+  return `translate(${dx.toFixed(1)},${dy.toFixed(1)}) translate(${p.o[0]},${p.o[1]}) scale(${sc.toFixed(3)}) translate(${-p.o[0]},${-p.o[1]})`;
 };
 
 export function buildShoe(o: ShoeOptions): Slice[] {
@@ -70,7 +97,6 @@ export function buildShoe(o: ShoeOptions): Slice[] {
   const N = 22;
   const zm = 80;
   const step = (2 * zm) / (N - 1);
-  const e = o.explode;
   const slices: Slice[] = [];
 
   for (let i = 0; i < N; i++) {
@@ -79,35 +105,30 @@ export function buildShoe(o: ShoeOptions): Slice[] {
     for (const p of GEOM) {
       if (Math.abs(z) > p.hd) continue;
       const front = z + step > p.hd;
-      const on = o.sel === p.id;
-      const hov = !on && o.hover === p.id;
+      const pull = o.pull[p.id];
       const s = 1 - p.k * Math.pow(z / p.hd, 2);
-      const lift = on ? 1.25 : 1;
-      const of = OFFSETS[p.id];
-      const dx = of[0] * e * lift;
-      const dy = of[1] * e * lift - (on ? 8 : 0);
-      const tf = `translate(${dx.toFixed(1)},${dy.toFixed(1)}) translate(${p.o[0]},${p.o[1]}) scale(${s.toFixed(3)}) translate(${-p.o[0]},${-p.o[1]})`;
-      const light = p.sole ? "#E2D7D7" : "#F8F3F1";
-      const dark = p.sole ? "#857883" : "#A3949F";
-      const c = front ? light : mix(dark, light, 0.25 + 0.6 * ((z + zm) / (2 * zm)));
-      const base = { part: p.id, d: p.d, tf };
-      let n = 0;
-      const push = (x: Omit<SlicePath, "key" | "part" | "d" | "tf"> & { tf?: string }) =>
-        parts.push({ ...base, ...x, key: `${p.id}-${n++}` });
+      const tf = partTransform(p, o, s);
 
-      if ((on || hov) && front) {
-        push({ fill: "none", stroke: A, sw: p.lace ? 14 : 10, op: on ? 0.35 : 0.18, hit: false });
+      const fade = 0.5 * o.focus * (1 - pull);
+      const light = mix(p.sole ? "#E2D7D7" : "#F8F3F1", "#2D3554", fade);
+      const dark = mix(p.sole ? "#857883" : "#A3949F", "#131826", fade);
+      const c = front ? light : mix(dark, light, 0.25 + 0.6 * ((z + zm) / (2 * zm)));
+      let n = 0;
+      const push = (x: Omit<SlicePath, "key" | "d" | "tf"> & { tf?: string }) =>
+        parts.push({ d: p.d, tf, ...x, key: `${p.id}-${n++}` });
+
+      if (front && pull > 0.02) {
+        push({ fill: "none", stroke: A, sw: p.lace ? 14 : 10, op: 0.35 * pull });
       }
       if (p.lace) {
-        push({ fill: "none", stroke: c, sw: 7, op: 1, hit: true });
+        push({ fill: "none", stroke: c, sw: 7, op: 1 });
         continue;
       }
       push({
         fill: c,
-        stroke: front ? (on || hov ? A : mix(light, dark, 0.35)) : c,
-        sw: front ? (on ? 2.5 : hov ? 1.8 : 1.2) : 2.4,
+        stroke: front ? (pull > 0.5 ? A : mix(light, dark, 0.35)) : c,
+        sw: front ? 1.2 + 1.3 * pull : 2.4,
         op: 1,
-        hit: true,
       });
       if (front) {
         const cx = p.o[0];
@@ -116,8 +137,7 @@ export function buildShoe(o: ShoeOptions): Slice[] {
           fill: "#FFFFFF",
           stroke: "none",
           sw: 0,
-          op: 0.35,
-          hit: false,
+          op: 0.35 * (1 - fade),
           tf: `${tf} translate(${cx},${tp}) scale(0.78,0.42) translate(${-cx},${-tp})`,
         });
       }
@@ -125,4 +145,17 @@ export function buildShoe(o: ShoeOptions): Slice[] {
     slices.push({ z: (z * k).toFixed(1), parts });
   }
   return slices;
+}
+
+export function buildHitLayers(o: ShoeOptions): HitLayer[] {
+  const k = o.w / 620;
+  const rest = { ...o, pull: NO_PULL };
+  return GEOM.flatMap((p) =>
+    [1, 0, -1].map((depth) => {
+      const s = 1 - p.k * depth * depth;
+      const paths = [{ key: "rest", d: p.d, tf: partTransform(p, rest, s), lace: !!p.lace }];
+      if (o.pull[p.id] > 0.02) paths.push({ key: "pulled", d: p.d, tf: partTransform(p, o, s), lace: !!p.lace });
+      return { key: `${p.id}${depth}`, part: p.id, z: (depth * p.hd * k).toFixed(1), paths };
+    }),
+  );
 }

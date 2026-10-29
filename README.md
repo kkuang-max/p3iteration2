@@ -10,22 +10,23 @@ pointing at a part of the exploded shoe opens a short explainer for that part.
 | --- | --- |
 | Nobody around (9 s) | **Attract mode**: shoe sits assembled and cycles through parts to catch the eye |
 | Raises a hand | Shoe explodes apart; a cursor follows the index fingertip |
-| Points at a part (or its label) | Part outlines in blue |
-| Holds still ~0.85 s | Dwell ring fills, part lifts out, its info appears bottom-left |
-| Swipes quickly across a part | Opens that part immediately |
-| Pinches thumb + index | Opens the part under the cursor immediately |
+| Moves over a part (or its label) | That part smoothly pulls further out of the shoe, glows, and the rest fade back; its info appears bottom-left |
+| Moves to another part | The first part eases back in and the new one slides out |
 
-No camera? Touch or click works the same way, so it still works on a touchscreen.
+Hover is the whole interaction: no clicking, holding or pinching needed.
 
-Staff keys: `←/→` cycle parts, `c` toggles the camera preview, `f` toggles fullscreen.
+**Camera on/off:** use the `CAMERA ON` button in the bottom-right corner (or press `c`). Turning it off releases the
+webcam completely; touch, mouse hover and click keep working, so it still runs on a touchscreen or with no camera.
+
+Staff keys: `←/→` cycle parts, `c` toggles the camera, `f` toggles fullscreen.
 
 ## Code map
 
 - `lib/product.ts` — product name and per-part copy. Swap this to demo another product.
 - `lib/shoe.ts` — sliced 3D shoe geometry (ported from the "B · Centre stage" design reference).
-- `lib/useHandTracking.ts` — webcam + MediaPipe loop; reports the fingertip and pinch each frame.
-- `app/kiosk/Kiosk.tsx` — hit-testing, dwell / swipe / pinch, attract mode, layout.
-- Tuning constants (dwell time, swipe speed, idle timeout…) are at the top of `Kiosk.tsx`.
+- `lib/useHandTracking.ts` — webcam + MediaPipe loop; reports the fingertip each frame; can be switched off.
+- `app/kiosk/Kiosk.tsx` — hover hit-testing, pull-apart animation, attract mode, camera toggle, layout.
+- Tuning constants (hover settle time, easing speed, idle timeout…) are at the top of `Kiosk.tsx`.
 
 The hand model ships in `public/models/`, and `npm run dev` / `npm run build` copy the MediaPipe WASM runtime into
 `public/mediapipe/`, so the kiosk works without internet once built (expo Wi-Fi is unreliable).
