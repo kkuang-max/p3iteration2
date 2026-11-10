@@ -1,4 +1,4 @@
-# Stride One — touch-free expo kiosk
+# PlayForm — touch-free expo kiosk
 
 A booth kiosk prototype that demos a product while staff are busy. A webcam tracks
 the visitor's hand with [Google MediaPipe Hand Landmarker](https://ai.google.dev/edge/mediapipe/solutions/vision/hand_landmarker);
